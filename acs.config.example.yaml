@@ -1,0 +1,19 @@
+runtime:
+  target: local
+  image: ghcr.io/your-org/agent-runtime:latest
+  command: echo
+  args:
+    - acs runtime started
+  kubernetes:
+    namespace: default
+
+observability:
+  serviceName: agent-cloud-services
+  serviceVersion: 0.1.0
+  traces:
+    enabled: true
+    consoleExporter: true
+  metrics:
+    enabled: true
+    consoleExporter: true
+    exportIntervalMillis: 10000
