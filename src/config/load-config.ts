@@ -11,11 +11,11 @@ import { DEFAULT_CONFIG, type ACSConfig } from "../types/config";
 const DEFAULT_CONFIG_FILE = "acs.config.yaml";
 
 const RuntimeConfigSchema = z.object({
-  target: z.enum(["local", "docker", "kubernetes"]),
+  target: z.enum(["docker", "swarm"]),
   image: z.string().min(1).optional(),
   command: z.string().min(1),
   args: z.array(z.string()),
-  kubernetes: z.object({
+  swarm: z.object({
     namespace: z.string().min(1),
     context: z.string().min(1).optional()
   })
@@ -46,7 +46,7 @@ interface PartialConfig {
     image?: unknown;
     command?: unknown;
     args?: unknown;
-    kubernetes?: {
+    swarm?: {
       namespace?: unknown;
       context?: unknown;
     };
@@ -87,8 +87,8 @@ export async function loadConfig(configPath?: string): Promise<ACSConfig> {
       runtime: {
         ...DEFAULT_CONFIG.runtime,
         args: [...DEFAULT_CONFIG.runtime.args],
-        kubernetes: {
-          ...DEFAULT_CONFIG.runtime.kubernetes
+        swarm: {
+          ...DEFAULT_CONFIG.runtime.swarm
         }
       },
       observability: {
@@ -112,13 +112,11 @@ export async function loadConfig(configPath?: string): Promise<ACSConfig> {
       image: parsed.runtime?.image ?? DEFAULT_CONFIG.runtime.image,
       command: parsed.runtime?.command ?? DEFAULT_CONFIG.runtime.command,
       args: parsed.runtime?.args ?? [...DEFAULT_CONFIG.runtime.args],
-      kubernetes: {
+      swarm: {
         namespace:
-          parsed.runtime?.kubernetes?.namespace ??
-          DEFAULT_CONFIG.runtime.kubernetes.namespace,
+          parsed.runtime?.swarm?.namespace ?? DEFAULT_CONFIG.runtime.swarm.namespace,
         context:
-          parsed.runtime?.kubernetes?.context ??
-          DEFAULT_CONFIG.runtime.kubernetes.context
+          parsed.runtime?.swarm?.context ?? DEFAULT_CONFIG.runtime.swarm.context
       }
     },
     observability: {

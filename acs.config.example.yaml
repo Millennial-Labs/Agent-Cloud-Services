@@ -1,10 +1,10 @@
 runtime:
-  target: local
+  target: docker
   image: ghcr.io/your-org/agent-runtime:latest
   command: echo
   args:
     - acs runtime started
-  kubernetes:
+  swarm:
     namespace: default
 
 observability:

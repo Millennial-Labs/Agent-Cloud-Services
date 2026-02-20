@@ -1,6 +1,6 @@
 # Agent Cloud Services CLI
 
-`acs` is a Bun-managed TypeScript CLI for running agent harness runtimes on local machines and production targets (Docker and Kubernetes) with built-in observability.
+`acs` is a Bun-managed TypeScript CLI for running agent harness runtimes in Docker and swarm modes with built-in observability.
 
 ## Scaffold Includes
 
@@ -16,8 +16,8 @@
 - Node.js 20+
 - Bun 1.2+
 - Optional runtime dependencies:
-  - Docker CLI for `docker` target
-  - `kubectl` with cluster access for `kubernetes` target
+  - Docker CLI for container execution
+  - Swarm/orchestrator tooling (planned wiring)
 
 ## Install For Local Development
 
@@ -25,6 +25,7 @@
 bun install
 bun run build
 bun link
+acs init --org "your-org-name"
 acs --help
 ```
 
@@ -39,10 +40,12 @@ bun add -g @your-org/agent-cloud-services
 ## Usage
 
 ```bash
-acs run
-acs run my-runtime --target local
-acs run my-runtime --target docker --dry-run
-acs run my-runtime --target kubernetes --config ./acs.config.yaml
+acs init --org "acme"
+acs create https://github.com/acme/my-harness
+acs create https://github.com/acme/my-harness custom-name
+acs run my-harness-1
+acs create https://github.com/acme/a https://github.com/acme/b --env production --project prj_default
+acs run my-harness-1 --env development --project prj_default --dry-run
 ```
 
 ## Configuration
@@ -50,6 +53,45 @@ acs run my-runtime --target kubernetes --config ./acs.config.yaml
 If `./acs.config.yaml` exists, it is auto-loaded. You can also pass `--config <path>`.
 
 Use `acs.config.example.yaml` as a starter file.
+
+## Tenancy and State Model
+
+`acs init` creates a tenancy root on your machine. Default path:
+
+- `$ACS_HOME` if set
+- otherwise `~/.acs`
+
+On first init, ACS generates an organization identity + API key and creates separate development and production environment paths with isolated project directories.
+
+```text
+~/.acs/
+  manifest.json
+  context.json
+  auth/
+    organization.json
+    credentials.json
+  environments/
+    development/
+      environment.json
+      projects/
+        prj_default/
+          project.json
+          instances/
+    production/
+      environment.json
+      projects/
+        prj_default/
+          project.json
+          instances/
+```
+
+Notes:
+
+- `development/environment.json` includes a captured local machine profile (CPU, memory, platform) for capacity-aware runtime decisions.
+- `context.json` tracks the current environment/project for commands that do not specify overrides.
+- On `acs init`, current context defaults to `production/prj_default` (override on commands via `--env` and `--project`).
+- `production/environment.json` is separated for project-level deployment metadata and policies.
+- `auth/credentials.json` contains the generated API key for this local installation.
 
 ## Observability Notes
 

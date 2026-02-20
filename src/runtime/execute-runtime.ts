@@ -37,22 +37,13 @@ export async function executeRuntime(input: RuntimeExecutionInput): Promise<void
 
 function buildTargetCommand(input: RuntimeExecutionInput): BuiltCommand {
   switch (input.target) {
-    case "local":
-      return buildLocalCommand(input.config);
     case "docker":
       return buildDockerCommand(input.config, input.name);
-    case "kubernetes":
-      return buildKubernetesCommand(input.config, input.name);
+    case "swarm":
+      return buildSwarmCommand(input.config, input.name);
     default:
       return assertNever(input.target);
   }
-}
-
-function buildLocalCommand(config: ACSConfig): BuiltCommand {
-  return {
-    command: config.runtime.command,
-    args: [...config.runtime.args]
-  };
 }
 
 function buildDockerCommand(config: ACSConfig, name: string): BuiltCommand {
@@ -76,32 +67,12 @@ function buildDockerCommand(config: ACSConfig, name: string): BuiltCommand {
   };
 }
 
-function buildKubernetesCommand(config: ACSConfig, name: string): BuiltCommand {
-  if (!config.runtime.image) {
-    throw new Error(
-      "runtime.image is required when target=kubernetes. Set it in acs.config.yaml."
-    );
-  }
-
-  const args = [
-    "run",
-    name,
-    "--restart=Never",
-    "--image",
-    config.runtime.image,
-    "--namespace",
-    config.runtime.kubernetes.namespace
-  ];
-
-  if (config.runtime.kubernetes.context) {
-    args.push("--context", config.runtime.kubernetes.context);
-  }
-
-  args.push("--command", "--", config.runtime.command, ...config.runtime.args);
-
+function buildSwarmCommand(config: ACSConfig, name: string): BuiltCommand {
   return {
-    command: "kubectl",
-    args
+    command: "echo",
+    args: [
+      `swarm placeholder deployment for ${name} in namespace ${config.runtime.swarm.namespace}`
+    ]
   };
 }
 

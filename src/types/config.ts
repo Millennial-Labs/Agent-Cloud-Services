@@ -1,4 +1,4 @@
-export type RuntimeTarget = "local" | "docker" | "kubernetes";
+export type RuntimeTarget = "docker" | "swarm";
 
 export interface ACSConfig {
   runtime: {
@@ -6,7 +6,7 @@ export interface ACSConfig {
     image?: string;
     command: string;
     args: string[];
-    kubernetes: {
+    swarm: {
       namespace: string;
       context?: string;
     };
@@ -28,10 +28,10 @@ export interface ACSConfig {
 
 export const DEFAULT_CONFIG: ACSConfig = {
   runtime: {
-    target: "local",
+    target: "docker",
     command: "echo",
     args: ["acs runtime started"],
-    kubernetes: {
+    swarm: {
       namespace: "default"
     }
   },
