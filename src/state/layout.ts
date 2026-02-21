@@ -86,3 +86,11 @@ export function getInstancesDir(
 ): string {
   return path.join(getProjectDir(layout, environment, projectId), "instances");
 }
+
+export function getRunsDir(
+  layout: StateLayout,
+  environment: "development" | "production",
+  projectId: string
+): string {
+  return path.join(getProjectDir(layout, environment, projectId), "runs");
+}

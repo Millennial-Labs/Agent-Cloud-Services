@@ -5,6 +5,7 @@ import { SpanStatusCode } from "@opentelemetry/api";
 import { logger } from "../observability/logger";
 import type { TelemetryContext } from "../observability/telemetry";
 import {
+  createRunRecord,
   findRuntimeByName,
   resolveProjectScope,
   saveRuntimeRecord
@@ -59,6 +60,8 @@ export async function runCommand(
         span.setAttribute("acs.runtime.name", runtime.record.name);
         span.setAttribute("acs.runtime.target", runtime.record.target);
 
+        const runStartedAt = new Date().toISOString();
+
         if (!options.dryRun) {
           const now = new Date().toISOString();
           const nextRecord = {
@@ -72,6 +75,25 @@ export async function runCommand(
 
           await saveRuntimeRecord(runtime.filePath, nextRecord);
         }
+
+        const runEndedAt = new Date().toISOString();
+        const runRecord = await createRunRecord(scope, {
+          instanceId: runtime.record.id,
+          instanceName: runtime.record.name,
+          environment: scope.environment,
+          projectId: scope.projectId,
+          target: runtime.record.target,
+          sourceUrl: runtime.record.source.url,
+          status: "completed",
+          dryRun: options.dryRun,
+          startedAt: runStartedAt,
+          endedAt: runEndedAt,
+          durationMs:
+            new Date(runEndedAt).getTime() - new Date(runStartedAt).getTime(),
+          message: options.dryRun
+            ? "Dry-run validation completed."
+            : "Placeholder execution completed."
+        });
 
         logger.info(
           {
@@ -89,6 +111,7 @@ export async function runCommand(
             options.dryRun ? "ready to run (dry-run)" : "marked as running"
           }.\n`
         );
+        process.stdout.write(`Run ID: ${runRecord.id}\n`);
         process.stdout.write(
           "Execution pipeline is a placeholder in this first pass; container orchestration wiring is next.\n"
         );

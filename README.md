@@ -41,12 +41,50 @@ bun add -g @your-org/agent-cloud-services
 
 ```bash
 acs init --org "acme"
+
+# quick aliases
 acs create https://github.com/acme/my-harness
 acs create https://github.com/acme/my-harness custom-name
 acs run my-harness-1
+
+# resource-oriented commands
+acs status
+acs org show --detail standard
+acs context show
+acs context set --env development --project prj_default
+acs env list
+acs project list
+acs instance list
+acs run list
+acs run show run_123 --detail full
+
+# scope overrides
 acs create https://github.com/acme/a https://github.com/acme/b --env production --project prj_default
 acs run my-harness-1 --env development --project prj_default --dry-run
 ```
+
+## Command Model
+
+- `acs status`
+- `acs org show`
+- `acs context show`
+- `acs context set --env <development|production> --project <project-id>`
+- `acs env list`
+- `acs env show <development|production>`
+- `acs project list [--env <...>]`
+- `acs project show <project-id> [--env <...>]`
+- `acs project use <project-id> [--env <...>]`
+- `acs instance list [--env <...> --project <...>]`
+- `acs instance show <name> [--env <...> --project <...>]`
+- `acs instance create <github-url...> [--name <name>] [--env <...> --project <...>]`
+- `acs instance run <name> [--dry-run] [--env <...> --project <...>]`
+- `acs run list [--env <...> --project <...>]`
+- `acs run show <run-id> [--env <...> --project <...>]`
+
+Aliases:
+
+- `acs create ...` -> `acs instance create ...`
+- `acs run <name> ...` -> `acs instance run <name> ...`
 
 ## Configuration
 
@@ -77,12 +115,14 @@ On first init, ACS generates an organization identity + API key and creates sepa
         prj_default/
           project.json
           instances/
+          runs/
     production/
       environment.json
       projects/
         prj_default/
           project.json
           instances/
+          runs/
 ```
 
 Notes:
@@ -92,6 +132,15 @@ Notes:
 - On `acs init`, current context defaults to `production/prj_default` (override on commands via `--env` and `--project`).
 - `production/environment.json` is separated for project-level deployment metadata and policies.
 - `auth/credentials.json` contains the generated API key for this local installation.
+
+## Output Levels
+
+Most read/list commands support:
+
+- `--detail concise` (default)
+- `--detail standard`
+- `--detail full`
+- `--json` for machine-readable output
 
 ## Observability Notes
 

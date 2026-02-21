@@ -2,13 +2,24 @@ import { randomUUID } from "node:crypto";
 import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import {
-  type CurrentContextRecord,
-  type EnvironmentName,
-  type ProjectRecord,
-  type RuntimeInstanceRecord
+import type {
+  ACSManifest,
+  CurrentContextRecord,
+  EnvironmentName,
+  EnvironmentRecord,
+  OrganizationRecord,
+  ProjectRecord,
+  RunRecord,
+  RunRecordStatus,
+  RuntimeInstanceRecord
 } from "../types/state";
-import { getInstancesDir, getProjectDir, getProjectFilePath, getStateLayout } from "./layout";
+import {
+  getInstancesDir,
+  getProjectDir,
+  getProjectFilePath,
+  getRunsDir,
+  getStateLayout
+} from "./layout";
 
 export interface ProjectScope {
   homePath: string;
@@ -17,6 +28,7 @@ export interface ProjectScope {
   projectId: string;
   project: ProjectRecord;
   instancesDir: string;
+  runsDir: string;
 }
 
 export interface ResolveScopeInput {
@@ -31,9 +43,29 @@ export interface CreateRuntimeInstanceInput {
   target: "docker" | "swarm";
 }
 
+export interface CreateRunRecordInput {
+  instanceId: string;
+  instanceName: string;
+  environment: EnvironmentName;
+  projectId: string;
+  target: "docker" | "swarm";
+  sourceUrl: string;
+  status: RunRecordStatus;
+  dryRun: boolean;
+  startedAt: string;
+  endedAt?: string;
+  durationMs?: number;
+  message?: string;
+}
+
 export interface RuntimeRecordWithPath {
   filePath: string;
   record: RuntimeInstanceRecord;
+}
+
+export interface RunRecordWithPath {
+  filePath: string;
+  record: RunRecord;
 }
 
 export async function resolveProjectScope(
@@ -64,7 +96,10 @@ export async function resolveProjectScope(
 
   const project = await readJson<ProjectRecord>(projectPath);
   const instancesDir = getInstancesDir(layout, environment, projectId);
+  const runsDir = getRunsDir(layout, environment, projectId);
+
   await mkdir(instancesDir, { recursive: true });
+  await mkdir(runsDir, { recursive: true });
 
   return {
     homePath: layout.homePath,
@@ -72,7 +107,8 @@ export async function resolveProjectScope(
     environment,
     projectId,
     project,
-    instancesDir
+    instancesDir,
+    runsDir
   };
 }
 
@@ -86,9 +122,11 @@ export async function createDefaultProject(
   const layout = getStateLayout(homePath);
   const projectDir = getProjectDir(layout, environment, projectId);
   const instancesDir = getInstancesDir(layout, environment, projectId);
+  const runsDir = getRunsDir(layout, environment, projectId);
 
   await mkdir(projectDir, { recursive: true });
   await mkdir(instancesDir, { recursive: true });
+  await mkdir(runsDir, { recursive: true });
 
   const record: ProjectRecord = {
     id: projectId,
@@ -110,6 +148,87 @@ export async function writeCurrentContext(
 ): Promise<void> {
   const layout = getStateLayout(homePath);
   await writeJson(layout.contextPath, context);
+}
+
+export async function readManifestRecord(homePath?: string): Promise<ACSManifest> {
+  const layout = getStateLayout(homePath);
+  return readJson<ACSManifest>(layout.manifestPath);
+}
+
+export async function readOrganizationRecord(
+  homePath?: string
+): Promise<OrganizationRecord> {
+  const layout = getStateLayout(homePath);
+  return readJson<OrganizationRecord>(layout.organizationPath);
+}
+
+export async function readContextRecord(
+  homePath?: string
+): Promise<CurrentContextRecord> {
+  const layout = getStateLayout(homePath);
+  return readJson<CurrentContextRecord>(layout.contextPath);
+}
+
+export async function readEnvironmentRecord(
+  environment: EnvironmentName,
+  homePath?: string
+): Promise<EnvironmentRecord> {
+  const layout = getStateLayout(homePath);
+  const targetPath =
+    environment === "development"
+      ? layout.developmentEnvironmentPath
+      : layout.productionEnvironmentPath;
+  return readJson<EnvironmentRecord>(targetPath);
+}
+
+export async function listEnvironmentRecords(
+  homePath?: string
+): Promise<EnvironmentRecord[]> {
+  const development = await readEnvironmentRecord("development", homePath);
+  const production = await readEnvironmentRecord("production", homePath);
+  return [development, production];
+}
+
+export async function listProjectRecords(
+  environment: EnvironmentName,
+  homePath?: string
+): Promise<ProjectRecord[]> {
+  const layout = getStateLayout(homePath);
+  const projectsRoot =
+    environment === "development"
+      ? layout.developmentProjectsDir
+      : layout.productionProjectsDir;
+  const entries = await readdir(projectsRoot, { withFileTypes: true });
+  const output: ProjectRecord[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const projectPath = path.join(projectsRoot, entry.name, "project.json");
+    if (!(await pathExists(projectPath))) {
+      continue;
+    }
+
+    output.push(await readJson<ProjectRecord>(projectPath));
+  }
+
+  return output.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+export async function getProjectRecord(
+  environment: EnvironmentName,
+  projectId: string,
+  homePath?: string
+): Promise<ProjectRecord | undefined> {
+  const layout = getStateLayout(homePath);
+  const projectPath = getProjectFilePath(layout, environment, projectId);
+  if (!(await pathExists(projectPath))) {
+    return undefined;
+  }
+
+  return readJson<ProjectRecord>(projectPath);
 }
 
 export async function createRuntimeInstance(
@@ -168,6 +287,14 @@ export async function findRuntimeByName(
   return all.find((item) => item.record.name === name);
 }
 
+export async function findRuntimeById(
+  scope: ProjectScope,
+  runtimeId: string
+): Promise<RuntimeRecordWithPath | undefined> {
+  const all = await listRuntimeInstances(scope);
+  return all.find((item) => item.record.id === runtimeId);
+}
+
 export async function saveRuntimeRecord(
   filePath: string,
   record: RuntimeInstanceRecord
@@ -191,7 +318,69 @@ export async function listRuntimeInstances(
     output.push({ filePath, record });
   }
 
-  return output;
+  return output.sort((a, b) => a.record.name.localeCompare(b.record.name));
+}
+
+export async function createRunRecord(
+  scope: ProjectScope,
+  input: CreateRunRecordInput
+): Promise<RunRecord> {
+  const record: RunRecord = {
+    id: `run_${randomUUID().replaceAll("-", "").slice(0, 16)}`,
+    instanceId: input.instanceId,
+    instanceName: input.instanceName,
+    environment: input.environment,
+    projectId: input.projectId,
+    target: input.target,
+    sourceUrl: input.sourceUrl,
+    status: input.status,
+    dryRun: input.dryRun,
+    startedAt: input.startedAt,
+    endedAt: input.endedAt,
+    durationMs: input.durationMs,
+    message: input.message
+  };
+
+  await writeJson(path.join(scope.runsDir, `${record.id}.json`), record);
+  return record;
+}
+
+export async function listRunRecords(
+  scope: Pick<ProjectScope, "runsDir">
+): Promise<RunRecordWithPath[]> {
+  const entries = await readdir(scope.runsDir, { withFileTypes: true });
+  const output: RunRecordWithPath[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) {
+      continue;
+    }
+
+    const filePath = path.join(scope.runsDir, entry.name);
+    const record = await readJson<RunRecord>(filePath);
+    output.push({ filePath, record });
+  }
+
+  return output.sort((a, b) => b.record.startedAt.localeCompare(a.record.startedAt));
+}
+
+export async function findRunById(
+  scope: Pick<ProjectScope, "runsDir">,
+  runId: string
+): Promise<RunRecordWithPath | undefined> {
+  const filePath = path.join(scope.runsDir, `${runId}.json`);
+  if (!(await pathExists(filePath))) {
+    return undefined;
+  }
+
+  return {
+    filePath,
+    record: await readJson<RunRecord>(filePath)
+  };
+}
+
+export async function saveRunRecord(filePath: string, record: RunRecord): Promise<void> {
+  await writeJson(filePath, record);
 }
 
 async function updateProjectRuntimeCount(scope: ProjectScope): Promise<void> {

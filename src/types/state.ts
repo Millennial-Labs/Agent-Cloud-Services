@@ -82,6 +82,24 @@ export interface RuntimeInstanceRecord {
   lastRunAt?: string;
 }
 
+export type RunRecordStatus = "queued" | "running" | "completed" | "failed";
+
+export interface RunRecord {
+  id: string;
+  instanceId: string;
+  instanceName: string;
+  environment: EnvironmentName;
+  projectId: string;
+  target: RuntimeTarget;
+  sourceUrl: string;
+  status: RunRecordStatus;
+  dryRun: boolean;
+  startedAt: string;
+  endedAt?: string;
+  durationMs?: number;
+  message?: string;
+}
+
 export interface InitStateInput {
   orgName: string;
   homePath?: string;
